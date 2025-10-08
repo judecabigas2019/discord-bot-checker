@@ -58,7 +58,7 @@ app.post("/interactions", async (req, res) => {
       // ✅ Reply to Discord immediately
       res.json({
         type: 4,
-        data: { content: `✅ Sent ${url} to n8n for audit!` }
+        data: { content: `✅ Sent ${url} to REMA AI for audit!` }
       });
 
       // 🔄 Forward to n8n asynchronously (don’t block Discord reply)
