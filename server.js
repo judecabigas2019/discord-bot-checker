@@ -1,26 +1,29 @@
 import express from "express";
 import fetch from "node-fetch";
-import crypto from "crypto";
+import nacl from "tweetnacl";
+import bodyParser from "body-parser";
 
 const app = express();
-app.use(express.json());
-
 const PUBLIC_KEY = process.env.DISCORD_PUBLIC_KEY;
-const N8N_WEBHOOK = process.env.N8N_WEBHOOK; // e.g. https://your-n8n.coolify.app/webhook/audit
+const N8N_WEBHOOK = process.env.N8N_WEBHOOK;
 
-// Discord signature verification
+// Capture raw body for signature verification
+app.use(bodyParser.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString();
+  }
+}));
+
 function verifySignature(req) {
   const signature = req.get("x-signature-ed25519");
   const timestamp = req.get("x-signature-timestamp");
-  const body = JSON.stringify(req.body);
+  const body = req.rawBody;
 
-  const isVerified = crypto.verify(
-    "ed25519",
+  return nacl.sign.detached.verify(
     Buffer.from(timestamp + body),
-    Buffer.from(PUBLIC_KEY, "hex"),
-    Buffer.from(signature, "hex")
+    Buffer.from(signature, "hex"),
+    Buffer.from(PUBLIC_KEY, "hex")
   );
-  return isVerified;
 }
 
 app.post("/interactions", async (req, res) => {
@@ -29,20 +32,27 @@ app.post("/interactions", async (req, res) => {
   const interaction = req.body;
 
   if (interaction.type === 1) {
-    // Ping
+    // PING
     return res.json({ type: 1 });
   }
 
   if (interaction.type === 2 && interaction.data.name === "audit") {
     const url = interaction.data.options[0].value;
 
-    // Forward to n8n webhook
+    // Forward to n8n
     await fetch(N8N_WEBHOOK, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, user: interaction.member.user.username })
+      body: JSON.stringify({
+        url,
+        user: interaction.member.user.username,
+        userId: interaction.member.user.id,
+        channelId: interaction.channel_id,
+        guildId: interaction.guild_id
+      })
     });
 
+    // Immediate reply to Discord
     return res.json({
       type: 4,
       data: { content: `✅ Sent ${url} to n8n for audit!` }
