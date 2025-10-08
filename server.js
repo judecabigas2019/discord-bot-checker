@@ -38,7 +38,6 @@ function verifySignature(req) {
   }
 }
 
-// Main interactions route
 app.post("/interactions", async (req, res) => {
   try {
     if (!verifySignature(req)) {
@@ -47,7 +46,7 @@ app.post("/interactions", async (req, res) => {
 
     const interaction = req.body;
 
-    // Discord PING
+    // PING from Discord
     if (interaction.type === 1) {
       return res.json({ type: 1 });
     }
@@ -56,8 +55,14 @@ app.post("/interactions", async (req, res) => {
     if (interaction.type === 2 && interaction.data.name === "audit") {
       const url = interaction.data.options[0].value;
 
-      // Forward to n8n webhook
-      await fetch(N8N_WEBHOOK, {
+      // ✅ Reply to Discord immediately
+      res.json({
+        type: 4,
+        data: { content: `✅ Sent ${url} to n8n for audit!` }
+      });
+
+      // 🔄 Forward to n8n asynchronously (don’t block Discord reply)
+      fetch(N8N_WEBHOOK, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -67,13 +72,9 @@ app.post("/interactions", async (req, res) => {
           channelId: interaction.channel_id,
           guildId: interaction.guild_id
         })
-      });
+      }).catch(err => console.error("Error forwarding to n8n:", err));
 
-      // Immediate reply to Discord
-      return res.json({
-        type: 4,
-        data: { content: `✅ Sent ${url} to n8n for audit!` }
-      });
+      return; // stop here
     }
 
     // Fallback for unknown commands
