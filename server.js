@@ -2,10 +2,14 @@ import express from "express";
 import fetch from "node-fetch";
 import nacl from "tweetnacl";
 import bodyParser from "body-parser";
+import https from "https";
 
 const app = express();
 const PUBLIC_KEY = process.env.DISCORD_PUBLIC_KEY;
 const N8N_WEBHOOK = process.env.N8N_WEBHOOK;
+
+// Create an HTTPS agent that skips cert validation ONLY for n8n
+const insecureAgent = new https.Agent({ rejectUnauthorized: false });
 
 // Capture raw body for signature verification
 app.use(bodyParser.json({
@@ -61,7 +65,7 @@ app.post("/interactions", async (req, res) => {
         data: { content: `✅ Sent ${url} to REMA AI for audit!` }
       });
 
-      // 🔄 Forward to n8n asynchronously (don’t block Discord reply)
+      // 🔄 Forward to n8n asynchronously, ignoring self-signed cert
       fetch(N8N_WEBHOOK, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -71,13 +75,14 @@ app.post("/interactions", async (req, res) => {
           userId: interaction.member?.user?.id,
           channelId: interaction.channel_id,
           guildId: interaction.guild_id
-        })
-      }).catch(err => console.error("Error forwarding to n8n:", err));
+        }),
+        agent: insecureAgent
+      }).catch(err => console.error("Error forwarding to REMA AI:", err));
 
-      return; // stop here
+      return;
     }
 
-    // Fallback for unknown commands
+    // Fallback
     return res.json({
       type: 4,
       data: { content: "❌ Unknown command." }
